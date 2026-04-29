@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>3桁管理 Stat-50</title>
+    <style>
+        :root {
+            --bg-color: #f8f9fa;
+            --primary: #007bff;
+            --danger: #dc3545;
+            --text: #333;
+            --high-color: #ff4757;
+            --low-color: #2ed573;
+            --mode-color: #f39c12;
+            --reach-color: #e84393;
+        }
+        /* iPhoneのスクロールやタップの反応を改善 */
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif;
+            background: #000; /* iPhoneのノッチ周りに馴染むよう背景黒 */
+            margin: 0; 
+            display: flex; 
+            justify-content: center;
+            overflow: hidden; /* 全画面アプリ風にするためbody自体のスクロール抑制 */
+        }
+        .app-container { 
+            width: 100%; 
+            max-width: 500px; 
+            background: white; 
+            height: 100vh;
+            display: flex; 
+            flex-direction: column; 
+            /* iPhone下部のバー(セーフエリア)に対応 */
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        
+        header { 
+            background: var(--primary); 
+            color: white; 
+            padding: 15px 0; 
+            padding-top: env(safe-area-inset-top); /* iPhone上部のバーに対応 */
+            text-align: center; 
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        nav { display: flex; background: #f1f1f1; }
+        nav button { 
+            flex: 1; padding: 15px; border: none; cursor: pointer; 
+            background: #f1f1f1; font-weight: bold; font-size: 1rem;
+            -webkit-tap-highlight-color: transparent; /* タップ時の青枠消し */
+        }
+        nav button.active { background: white; border-bottom: 4px solid var(--primary); color: var(--primary); }
+
+        .content { 
+            flex: 1; padding: 15px; display: none; 
+            overflow-y: auto; /* 履歴などはスクロール可能に */
+            -webkit-overflow-scrolling: touch;
+        }
+        .content.active { display: block; }
+
+        /* 統計 */
+        .stats-box { background: #222; color: #fff; padding: 12px; border-radius: 12px; margin-bottom: 10px; font-size: 0.75rem; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 15px; }
+        .stat-line { display: flex; justify-content: space-between; border-bottom: 1px solid #444; padding-bottom: 3px; }
+        .stat-count { color: #00ff00; font-weight: bold; }
+
+        /* 表示 */
+        .display { 
+            font-size: 3rem; background: #1a1a1a; color: #00ff00; text-align: center; 
+            padding: 15px; border-radius: 12px; margin-bottom: 5px; font-family: 'Courier New', monospace;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+        .pattern-hint { height: 24px; text-align: center; font-size: 1rem; font-weight: bold; margin-bottom: 10px; }
+        
+        /* テンキー iPhoneで押しやすいサイズ */
+        .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .keypad button { 
+            height: 65px; font-size: 1.6rem; border: 1px solid #ddd; border-radius: 12px; 
+            background: #fff; cursor: pointer; font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .keypad button:active { background: #ebebeb; transform: translateY(2px); box-shadow: none; }
+        .btn-record { 
+            grid-column: span 3; background: var(--primary) !important; color: white; 
+            height: 70px !important; margin-top: 5px; border:none; font-size:1.3rem !important;
+        }
+
+        /* 履歴リスト */
+        .history-list { list-style: none; padding: 0; }
+        .history-item { 
+            border-bottom: 1px solid #eee; padding: 12px 5px; 
+            display: flex; justify-content: space-between; align-items: center; 
+        }
+        .log-val { font-size: 1.2rem; font-weight: bold; font-family: monospace; }
+        .log-pattern { font-size: 0.75rem; padding: 3px 8px; border-radius: 6px; border: 1px solid #ddd; }
+        .btn-delete { background: none; border: none; color: #ffbcbc; font-size: 1.5rem; padding: 5px 10px; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <header>Data Management V8</header>
+    <nav>
+        <button id="nav-input" class="active" onclick="showPage('input')">入力・統計</button>
+        <button id="nav-history" onclick="showPage('history')">履歴管理</button>
+    </nav>
+
+    <div id="page-input" class="content active">
+        <div class="stats-box">
+            <div style="margin-bottom: 8px; border-bottom: 1px solid #666; padding-bottom: 4px; font-weight: bold; color: #aaa; text-align: center;">直近50件 出現傾向</div>
+            <div id="statsGrid" class="stats-grid"></div>
+        </div>
+
+        <div class="display" id="display">---</div>
+        <div id="patternHint" class="pattern-hint"></div>
+        
+        <div class="keypad">
+            <button onclick="press('1')">1</button><button onclick="press('2')">2</button><button onclick="press('3')">3</button>
+            <button onclick="press('4')">4</button><button onclick="press('5')">5</button><button onclick="press('6')">6</button>
+            <button onclick="press('7')">7</button><button onclick="press('8')">8</button><button onclick="press('9')">9</button>
+            <button onclick="press('V')">V</button><button onclick="press('0')">0</button><button onclick="backspace()">←</button>
+            <button class="btn-record" onclick="saveData()">データを記録する</button>
+        </div>
+    </div>
+
+    <div id="page-history" class="content">
+        <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <strong style="font-size: 1.1rem;">全履歴データ</strong>
+            <button onclick="clearAll()" style="color:var(--danger); border:1px solid var(--danger); background:none; padding:5px 10px; border-radius:5px; font-size:0.8rem;">全削除</button>
+        </div>
+        <ul id="historyList" class="history-list"></ul>
+    </div>
+</div>
+
+<script>
+    let currentInput = "";
+    const STORAGE_KEY = 'iphone_pachi_v8';
+    
+    // リーチ目データ (そのまま保持)
+    const REACH_EYES = {"007":"007","012":"朝イチ目","026":"お風呂","032":"おさつ","038":"大宮","046":"お城","04V":"レシーブ","075":"おなご","081":"オッパイ","0V0":"顔文字","104":"天使","110":"110番","123":"旧朝イチ目","135":"G-ZONE目","168":"いろは","175":"イナゴ","184":"鰯","201":"匂い","223":"富士山","280":"ニーハオ","283":"翼","2V1":"ニブイチ","315":"最高","324":"MIZUHO","344":"サシシ","354":"神輿","365":"365日","415":"よいこ","423":"しじみ","428":"四谷","448":"使者","481":"支配","4V8":"渋谷","508":"ゴーヤ","510":"GOD","514":"来いよ","526":"小次郎","543":"暦","564":"殺し","56V":"転ぶ","5V0":"ご無礼","5V4":"拳","634":"武蔵","664":"ろくむし","681":"無敗","728":"浪速","753":"和み、七五三","758":"名古屋","78V":"7頭順目","801":"ハワイ","808":"八百屋","821":"ハニー","841":"弥生","845":"梯子","850":"ハチ公","873":"花見","87V":"花火","884":"林","V07":"ボーナス","V31":"Vサイン","V34":"バーサス"};
+    const SPECIAL_GORO = {"38V":"雅","461":"鎧","468":"ヨーロッパ","631":"無罪","831":"野菜"};
+
+    const PATTERN_ORDER = [
+        "Low:パターンなし", "Low:奇数テンパイ", "Low:奇数のみ",
+        "High:左偶数＋ケツ奇数テンパイ", "High:左奇数＋ケツ奇数テンパイ",
+        "High:奇数頭の順目", "High:奇数ハサミ+中も奇数", "High:Vハサミ+中は奇数",
+        "高モード示唆", "リーチ目"
+    ];
+
+    function showPage(pageId) {
+        document.querySelectorAll('.content').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+        document.getElementById('page-' + pageId).classList.add('active');
+        document.getElementById('nav-' + pageId).classList.add('active');
+        if(pageId === 'input') updateStatsUI();
+        if(pageId === 'history') updateHistoryUI();
+    }
+
+    function press(char) {
+        if (currentInput.length < 3) { 
+            currentInput += char; 
+            // iPhoneでのレスポンス感を出すためクリック音の代わりにバイブ（API対応していれば）
+            if(window.navigator.vibrate) window.navigator.vibrate(10);
+            updateInputUI(); 
+        }
+    }
+    function backspace() { currentInput = currentInput.slice(0, -1); updateInputUI(); }
+    
+    function updateInputUI() {
+        const display = document.getElementById('display');
+        const hint = document.getElementById('patternHint');
+        display.innerText = currentInput || "---";
+        const pattern = currentInput.length === 3 ? getPatternName(currentInput) : "";
+        hint.innerText = pattern;
+        
+        if (pattern.includes("リーチ目")) hint.style.color = "var(--reach-color)";
+        else if (pattern.includes("高モード")) hint.style.color = "var(--mode-color)";
+        else if (pattern.startsWith("High")) hint.style.color = "var(--high-color)";
+        else hint.style.color = "var(--low-color)";
+    }
+
+    function getPatternName(s) {
+        const d = s.split('');
+        const val = d.map(x => isNaN(x) ? x : parseInt(x));
+        const isOdd = (n) => typeof n === 'number' && n % 2 !== 0;
+        const isEven = (n) => typeof n === 'number' && n % 2 === 0;
+
+        if (REACH_EYES[s]) return `リーチ目 語呂：${REACH_EYES[s]}`;
+        if (SPECIAL_GORO[s]) return `高モード示唆 語呂：${SPECIAL_GORO[s]}`;
+        if (isEven(val[0]) && typeof val[1] === 'number' && typeof val[2] === 'number' && val[1] === val[0] + 1 && val[2] === val[1] + 1) return "高モード示唆";
+        if (isEven(val[0]) && val[1] === 0 && val[2] === 0) return "高モード示唆";
+        if (isOdd(val[0]) && val[1] === 0 && val[2] === 0) return "高モード示唆";
+        if (val[0] === 'V' && val[2] === 'V' && isOdd(val[1])) return "High:Vハサミ+中は奇数";
+        if (isOdd(val[0]) && val[0] === val[2] && isOdd(val[1]) && !(val[0] === val[1])) return "High:奇数ハサミ+中も奇数";
+        if (isOdd(val[0]) && typeof val[1] === 'number' && typeof val[2] === 'number' && val[1] === val[0]+1 && val[2] === val[1]+1) return "High:奇数頭の順目";
+        if (isOdd(val[0]) && isOdd(val[1]) && val[1] === val[2] && !(val[0] === val[1])) return "High:左奇数＋ケツ奇数テンパイ";
+        if (isEven(val[0]) && isOdd(val[1]) && val[1] === val[2]) return "High:左偶数＋ケツ奇数テンパイ";
+        if (isOdd(val[0]) && isOdd(val[1]) && isOdd(val[2]) && !(val[0] === val[1] && val[1] === val[2])) return "Low:奇数のみ";
+        if (isOdd(val[0]) && val[0] === val[1] && !(val[1] === val[2])) return "Low:奇数テンパイ";
+        return "Low:パターンなし";
+    }
+
+    function saveData() {
+        if (currentInput.length !== 3) return;
+        const logs = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        logs.unshift({ id: Date.now(), val: currentInput, pattern: getPatternName(currentInput) });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+        currentInput = "";
+        updateInputUI();
+        updateStatsUI();
+    }
+
+    function updateStatsUI() {
+        const logs = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        const recentLogs = logs.slice(0, 50);
+        const statsMap = {};
+        PATTERN_ORDER.forEach(p => statsMap[p] = 0);
+        
+        recentLogs.forEach(log => {
+            let key = log.pattern;
+            if (key.includes("リーチ目")) key = "リーチ目";
+            if (key.includes("高モード")) key = "高モード示唆";
+            if (statsMap[key] !== undefined) statsMap[key]++;
+        });
+
+        document.getElementById('statsGrid').innerHTML = PATTERN_ORDER.map(p => `
+            <div class="stat-line">
+                <span class="stat-name">${p.includes(':') ? p.split(':')[1] : p}</span>
+                <span class="stat-count">${statsMap[p]}</span>
+            </div>
+        `).join('');
+    }
+
+    function updateHistoryUI() {
+        const logs = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        document.getElementById('historyList').innerHTML = logs.map(item => {
+            let color = "var(--low-color)";
+            if (item.pattern.includes("リーチ目")) color = "var(--reach-color)";
+            else if (item.pattern.includes("高モード")) color = "var(--mode-color)";
+            else if (item.pattern.startsWith("High")) color = "var(--high-color)";
+            return `
+                <li class="history-item">
+                    <div>
+                        <span class="log-val">${item.val}</span> 
+                        <span class="log-pattern" style="border-color:${color}; color:${color}">
+                            ${item.pattern}
+                        </span>
+                    </div>
+                    <button class="btn-delete" onclick="deleteItem(${item.id})">×</button>
+                </li>
+            `;
+        }).join('');
+    }
+
+    function deleteItem(id) {
+        let logs = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        logs = logs.filter(item => item.id !== id);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+        updateHistoryUI();
+        updateStatsUI();
+    }
+
+    function clearAll() {
+        if(confirm("データを全てリセットしますか？")) { localStorage.removeItem(STORAGE_KEY); updateHistoryUI(); updateStatsUI(); }
+    }
+
+    window.onload = updateStatsUI;
+</script>
+
+</body>
+</html>
